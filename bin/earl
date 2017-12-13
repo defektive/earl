@@ -1,0 +1,201 @@
+#! /bin/bash
+# set -e
+EARL_PATH=`realpath $0`
+######################################################################
+##x```
+##|
+##|           ███████╗ █████╗ ██████╗ ██╗
+##|           ██╔════╝██╔══██╗██╔══██╗██║
+##|           █████╗  ███████║██████╔╝██║
+##|           ██╔══╝  ██╔══██║██╔══██╗██║
+##|           ███████╗██║  ██║██║  ██║███████╗
+##|           ╚══════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝
+##|
+##x```
+##|--------------------------------------------------------------------
+##x## Earl the Earl of URLs
+##x
+##x### Possible Uses
+##x
+##x - Watch a list of URLs for updates
+##x
+##|### Usage Examples:
+##x```
+##| earl -w path/to/watchlist -d directory/to/store/files
+##x```
+##|--------------------------------------------------------------------
+##|## Actions
+##--------------------------------------------------------------------
+
+##
+##|### watch
+##|  watch list of wirls
+##x
+##|  - `-w path/to/watchlist` *required*
+##|  - `-d path/to/store/curl/output` *required*
+##|  - `-i [interval in seconds]` defaults to 300 (5 minutes)
+##x
+function watch_action {
+
+  if [ -z $WATCHLIST ]; then
+    echo "you need to specify a watchlist"
+    exit
+  fi
+
+  if [ -z $TARGET_DIR ]; then
+    echo "you need to specify a directory to save the files in"
+    exit
+  fi
+
+  while true; do
+    for url in `cat "$WATCHLIST"`; do
+      file=$TARGET_DIR/`echo "$url" | sed 's/[^0-9a-zA-Z\.]//g'`
+      save_file="${file}_d`date +%Y%m%d-%H%M%S`.txt"
+      last_file=`ls -tr ${file}_d* | tail -n 1`
+
+      if [ "$last_file" != "" ]; then
+        last_modified=`cat $last_file | grep Last-Modified | cut -b 16-44`
+      else
+        if [ ! -z $COMMAND ]; then
+          echo "$diff" | $COMMAND "WATCHING" "$url"
+        fi
+      fi
+
+      if [ "$last_modified" == '' ]; then
+        last_modified=" Fri, 09 Sep 2011 17:03:56 GMT"
+      fi
+
+      # echo "curl --header \"If-Modified-Since:$last_modified\" -io \"$save_file\" \"$url\""
+      curl --insecure -s --header "If-Modified-Since:$last_modified" -io "$save_file" "$url"
+      not_modified=`cat $save_file | grep "HTTP/1.1 304 Not Modified" | wc -l`
+
+      # echo "CURL done!"
+      if [ "$not_modified" -ne "0" ]; then
+        echo "No Change: $url"
+        rm "$save_file"
+      elif [ -f "$last_file" ]; then
+        # echo "Diffing against ${last_file}"
+        diff=`_diff_files $last_file $save_file`
+        diff_lines=`echo "$diff" | wc -l`
+
+        if [ "$diff" == "" ]; then
+          echo "No Change: $url"
+          rm $save_file
+        else
+          echo "Change: $url"
+          if [ ! -z $COMMAND ]; then
+            echo "$diff" | $COMMAND "UPDATED" "$url"
+          fi
+        fi
+      fi
+      sleep 2;
+    done
+    sleep $SLEEP_INTERVAL;
+  done
+}
+
+
+##
+##|### help
+##|  displays help page
+##x
+function help_action {
+  if [ -z $MARKDOWN ]; then
+    echo face
+    cat $0 | grep -v "##x" | sed 's/##|[#]\+\?/##/g' | egrep -a --color  '^##[\*#\|-]+?'
+    exit 1
+  fi
+
+  cat $0 | egrep -a '^##[x\|]' | sed 's/##[x|]//g'
+  exit 1
+}
+
+ACTION="watch_action"
+SLEEP_INTERVAL="300"
+##
+##|--------------------------------------------------------------------
+##|## Options
+##--------------------------------------------------------------------
+while [[ $# -gt 0 ]] ; do
+  key="$1"
+  case $key in
+    watch|help)
+    ACTION="${1}_action"
+    ;;
+
+##
+##|### -c | --command
+##x
+##|  command to execute
+    -c | --command)
+    COMMAND=$2
+    shift
+    ;;
+
+##
+##|### -d | --dir
+##x
+##|  directory to store http responses
+    -d | --dir)
+    TARGET_DIR=$2
+    shift
+    ;;
+
+##
+##|### -h | --help
+##x
+##|  Display this help message
+    -h | --help)
+    ACTION='help_action'
+    ;;
+##
+##|### -i | --interval
+##x
+##|  file containing one URL per line
+    -i | --interval)
+    SLEEP_INTERVAL=$2
+    shift
+    ;;
+##
+##|### -m | --markdown
+##x
+##|  generate markdown (only used on the help action)
+    -m | --markdown)
+    MARKDOWN=1
+    ;;
+##
+##|### -w | --watchlist
+##x
+##|  file containing one URL per line
+    -w | --watchlist)
+    WATCHLIST=$2
+    shift
+    ;;
+    *)
+  esac
+  shift # past argument or value
+done
+
+#------
+# private methods
+
+function _diff_files {
+  last_file=$1
+  save_file=$2
+
+  last_content_length=`grep -i content-length $last_file | sed 's/[^0-9]//g'`
+  save_content_length=`grep -i content-length $save_file | sed 's/[^0-9]//g'`
+
+  # remove date headers
+  # remove content-lenght header (github includes a hash with it that changes every request)
+  grep_cmd='egrep -vi "(Date|x-fastly-request-id|x-served-by|-x-cache-hits):"'
+  diff -u <(tail -c $last_content_length $last_file) <(tail -c $save_content_length $save_file)
+}
+
+
+type "$ACTION" 1>/dev/null || exit 1
+
+$ACTION
+exit
+##--------------------------------------------------------------------
+######################################################################
