@@ -1,4 +1,5 @@
 #! /bin/bash
+# vi: set shiftwidth=2 tabstop=2 expandtab:
 # set -e
 EARL_PATH=`realpath $0`
 ######################################################################
@@ -23,6 +24,7 @@ EARL_PATH=`realpath $0`
 ##x```
 ##| earl -w path/to/watchlist -d directory/to/store/files
 ##x```
+##| See test/test.sh for a more real world use case
 ##|--------------------------------------------------------------------
 ##|## Actions
 ##--------------------------------------------------------------------
@@ -66,15 +68,19 @@ function watch_action {
       fi
 
       # echo "curl --header \"If-Modified-Since:$last_modified\" -io \"$save_file\" \"$url\""
-      curl --insecure -s --header "If-Modified-Since:$last_modified" -io "$save_file" "$url"
+      curl -H 'User-Agent: EarlURLEarl/1' --insecure -s --header "If-Modified-Since:$last_modified" -io "$save_file" "$url"
       not_modified=`cat $save_file | grep "HTTP/1.1 304 Not Modified" | wc -l`
 
       # echo "CURL done!"
-      if [ "$not_modified" -ne "0" ]; then
+
+      if [ ! -f "$save_file" ]; then
+        echo "Request Failed: $url"
+      elif [ "$not_modified" -ne "0" ]; then
         echo "No Change: $url"
         rm "$save_file"
       elif [ -f "$last_file" ]; then
         # echo "Diffing against ${last_file}"
+        _diff_files $last_file $save_file
         diff=`_diff_files $last_file $save_file`
         diff_lines=`echo "$diff" | wc -l`
 
@@ -188,8 +194,21 @@ function _diff_files {
 
   # remove date headers
   # remove content-lenght header (github includes a hash with it that changes every request)
-  grep_cmd='egrep -vi "(Date|x-fastly-request-id|x-served-by|-x-cache-hits):"'
-  diff -u <(tail -c $last_content_length $last_file) <(tail -c $save_content_length $save_file)
+  grep_pattern='^(Date|x-fastly-request-id|x-served-by|-x-cache-hits):'
+
+  if [ ! -z $last_content_length ]; then
+    last_length_opt="tail -c $last_content_length"
+  else
+    last_length_opt="cat"
+  fi
+
+  if [ ! -z $save_content_length ]; then
+    save_length_opt="tail -c $save_content_length"
+  else
+    save_length_opt="cat"
+  fi
+
+  diff -u <(cat $last_file | egrep -vi "$grep_pattern" | $last_length_opt) <(cat $save_file | egrep -vi "$grep_pattern" | $save_length_opt)
 }
 
 

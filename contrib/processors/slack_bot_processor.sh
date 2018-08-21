@@ -18,7 +18,7 @@ done
 
 slack_post() {
   message=$(sanitize "$1")
-  payload='payload={"channel": "#earl-earl-url", "username": "earlbot", "text": "'$message'", "icon_emoji": ":ghost:"}'
+  payload='payload={"channel": "#earl-earl-url", "username": "earlbot", "text": "'$message'", "icon_emoji": ":earl:"}'
   curl -X POST --data-urlencode "$payload" $SLACK_URL
 }
 

@@ -19,6 +19,7 @@
 ```
  earl -w path/to/watchlist -d directory/to/store/files
 ```
+ See test/test.sh for a more real world use case
 --------------------------------------------------------------------
 ## Actions
 ### watch
