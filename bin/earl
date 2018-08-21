@@ -80,7 +80,6 @@ function watch_action {
         rm "$save_file"
       elif [ -f "$last_file" ]; then
         # echo "Diffing against ${last_file}"
-        _diff_files $last_file $save_file
         diff=`_diff_files $last_file $save_file`
         diff_lines=`echo "$diff" | wc -l`
 
